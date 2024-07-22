@@ -2,6 +2,7 @@
 
 # Script to check Shared VPC and Dataflow settings
 
+
 # Function to check command success and report
 check_command() {
     if ! $@; then
@@ -21,6 +22,15 @@ read -p "Shared VPC Name: " SHARED_VPC_NAME
 read -p "Shared Subnet Name: " SHARED_SUBNET_NAME
 read -p "Region: " REGION
 read -p "Dataflow Service Account Email: " SA_EMAIL
+
+if [[ -z "$(gcloud config get-value project)" ]]; then
+    gcloud auth login
+fi
+
+# print the current gcloud account
+gcloud auth list
+
+gcloud config set project $SERVICE_PROJECT --quiet
 
 echo "Checking Shared VPC setup and permissions..."
 
@@ -50,29 +60,52 @@ fi
 # Check IAM permissions
 echo "Checking IAM permissions..."
 
-for ROLE in roles/dataflow.admin roles/dataflow.serviceAgent roles/compute.networkUser roles/storage.objectViewer
-do
-    echo "Checking $ROLE on host project..."
-    if gcloud projects get-iam-policy $HOST_PROJECT --format=json | jq -e '.bindings[] | select(.role=="'$ROLE'") | .members[]' | grep -q $SA_EMAIL; then
-        echo "PASSED: $ROLE found for $SA_EMAIL on host project"
-    else
-        echo "FAILED: $ROLE not found for $SA_EMAIL on host project"
+SERVICE_PROJECT_NUMBER=$(gcloud projects describe $SERVICE_PROJECT --format="value(projectNumber)")
+echo "Service project number: $SERVICE_PROJECT_NUMBER"
+COMPUTE_SA="${SERVICE_PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
+echo "Compute SA: $COMPUTE_SA"
+DATAFLOW_AGENT_SA="service-${SERVICE_PROJECT_NUMBER}@dataflow-service-producer-prod.iam.gserviceaccount.com"
+echo "Dataflow agent SA: $DATAFLOW_AGENT_SA"
+
+# Function to check role for service account
+check_role() {
+    local project=$1
+    local role=$2
+    local sa=$3
+    local resource_type=$4
+    local resource_name=$5
+
+    if [ "$resource_type" = "project" ]; then
+        if gcloud projects get-iam-policy $project --format=json | jq -e '.bindings[] | select(.role=="'$role'") | .members[]' | grep -q $sa; then
+            echo "PASSED: $role found for $sa on $resource_type $project"
+        else
+            echo "FAILED: $role not found for $sa on $resource_type $project"
+        fi
+    elif [ "$resource_type" = "subnet" ]; then
+        if gcloud compute networks subnets get-iam-policy $resource_name --region=$REGION --project=$project --format=json | jq -e '.bindings[] | select(.role=="'$role'") | .members[]' | grep -q $sa; then
+            echo "PASSED: $role found for $sa on $resource_type $resource_name"
+        else
+            echo "FAILED: $role not found for $sa on $resource_type $resource_name"
+        fi
     fi
+}
+
+# Check roles on host project and subnet for all service accounts
+for SA in $SA_EMAIL $COMPUTE_SA $DATAFLOW_AGENT_SA
+do
+    for ROLE in roles/dataflow.admin roles/dataflow.serviceAgent roles/compute.networkUser roles/storage.objectViewer
+    do
+        check_role $HOST_PROJECT $ROLE $SA "project" $HOST_PROJECT
+    done
+    check_role $HOST_PROJECT "roles/compute.networkUser" $SA "subnet" $SHARED_SUBNET_NAME
 done
 
-echo "Checking compute.networkUser role on subnet..."
-if gcloud compute networks subnets get-iam-policy $SHARED_SUBNET_NAME --region=$REGION --project=$HOST_PROJECT --format=json | jq -e '.bindings[] | select(.role=="roles/compute.networkUser") | .members[]' | grep -q $SA_EMAIL; then
-    echo "PASSED: compute.networkUser role found for $SA_EMAIL on subnet"
-else
-    echo "FAILED: compute.networkUser role not found for $SA_EMAIL on subnet"
-fi
+# Check dataflow.worker role on service project for SA_EMAIL and COMPUTE_SA
+for SA in $SA_EMAIL $COMPUTE_SA
+do
+    check_role $SERVICE_PROJECT "roles/dataflow.worker" $SA "project" $SERVICE_PROJECT
+done
 
-echo "Checking dataflow.worker role on service project..."
-if gcloud projects get-iam-policy $SERVICE_PROJECT --format=json | jq -e '.bindings[] | select(.role=="roles/dataflow.worker") | .members[]' | grep -q $SA_EMAIL; then
-    echo "PASSED: dataflow.worker role found for $SA_EMAIL on service project"
-else
-    echo "FAILED: dataflow.worker role not found for $SA_EMAIL on service project"
-fi
 
 # Check APIs enabled
 echo "Checking if necessary APIs are enabled..."
