@@ -12,6 +12,58 @@ refer to the README.md in ../dataflow_and_shared_vpc
 
 refer to the README.md in ../dataflow_and_shared_vpc
 
+
+## Dataproc Shared VPC Permissions
+
+This section outlines the permissions and configurations set up for running Dataproc jobs in a shared VPC environment.
+
+### Service Accounts
+
+The following service accounts are used:
+
+- Dataproc Service Account: `service-[SERVICE_PROJECT_NUMBER]@dataproc-accounts.iam.gserviceaccount.com`
+- Compute Engine Default Service Account: `[SERVICE_PROJECT_NUMBER]-compute@developer.gserviceaccount.com`
+- Google APIs Service Account: `[SERVICE_PROJECT_NUMBER]@cloudservices.gserviceaccount.com`
+
+### API Enablement
+
+The following APIs are enabled in the service project:
+
+- Compute Engine API
+- Dataproc API
+- Cloud Resource Manager API
+- Service Networking API
+
+### IAM Permissions
+
+#### Host Project
+
+- Dataproc Service Account:
+  - Role: `roles/compute.networkUser`
+
+- Google APIs Service Account:
+  - Role: `roles/compute.networkUser`
+
+#### Service Project
+
+- Compute Engine Default Service Account:
+  - Roles: 
+    - `roles/dataproc.worker`
+    - `roles/dataproc.serviceAgent`
+
+#### Shared Subnet
+
+- Dataproc Service Account:
+  - Role: `roles/compute.networkUser`
+
+- Google APIs Service Account:
+  - Role: `roles/compute.networkUser`
+
+### Network Configurations
+
+- Private Google Access is enabled on the shared subnet.
+- A firewall rule is created to allow traffic from the Dataproc cluster to Redis on port 6379.
+
 ## Check Permissions
 
 ```sh
