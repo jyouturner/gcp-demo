@@ -213,20 +213,7 @@ gcloud dataflow jobs run test-job \
 
 
 
-## Create A Minimal Redis instance in Host Project:
 
-```bash
-
-gcloud redis instances create $REDIS_INSTANCE_NAME \
---tier=basic \
---size=1 \
---region=$REGION \
---network=$SHARED_VPC_NAME \
---connect-mode=PRIVATE_SERVICE_ACCESS \
---project=$HOST_PROJECT \
---redis-version=redis_6_x
-
-```
 
 ## Set up private services access for Redis in Shared VPC:
 
@@ -254,6 +241,21 @@ gcloud compute firewall-rules create allow-redis-shared-vpc \
     --allow tcp:6379 \
     --source-ranges $SUBNET_RANGE \
     --project $HOST_PROJECT
+```
+
+## Create A Minimal Redis instance in Host Project:
+
+```bash
+
+gcloud redis instances create $REDIS_INSTANCE_NAME \
+--tier=basic \
+--size=1 \
+--region=$REGION \
+--network=$SHARED_VPC_NAME \
+--connect-mode=PRIVATE_SERVICE_ACCESS \
+--project=$HOST_PROJECT \
+--redis-version=redis_6_x
+
 ```
 
 ## Create the DataFlow Template
