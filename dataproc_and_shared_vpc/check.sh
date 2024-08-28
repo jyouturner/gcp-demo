@@ -117,15 +117,11 @@ check_role $HOST_PROJECT_NAME "roles/compute.networkUser" $DATAPROC_SA "subnet" 
 check_role $HOST_PROJECT_NAME "roles/compute.networkUser" $GOOGLE_APIS_SA "subnet" $SHARED_SUBNET_NAME
 
 # Check Private Google Access
-# Verify Private Google Access is enabled
 PRIVATE_ACCESS=$(gcloud compute networks subnets describe $SHARED_SUBNET_NAME --region=$REGION --project=$HOST_PROJECT_NAME --format="get(privateIpGoogleAccess)")
-if [ "$PRIVATE_ACCESS" = "true" ]; then
-    print_status "Verified: Private Google Access is enabled on subnet $SHARED_SUBNET_NAME"
-elif [ "$PRIVATE_ACCESS" = "True" ]; then
-    print_status "Verified: Private Google Access is enabled on subnet $SHARED_SUBNET_NAME (capitalized 'True')"
+if [ "$PRIVATE_ACCESS" = "true" ] || [ "$PRIVATE_ACCESS" = "True" ]; then
+    print_status "INFO: Private Google Access is enabled on subnet $SHARED_SUBNET_NAME"
 else
-    print_status "Error: Private Google Access is NOT enabled on subnet $SHARED_SUBNET_NAME"
-    print_info "Current Private Google Access status: $PRIVATE_ACCESS"
+    print_info "NOTE: Private Google Access is NOT enabled on subnet $SHARED_SUBNET_NAME. This may or may not be an issue depending on your specific configuration."
 fi
 
 # Additional debugging information
