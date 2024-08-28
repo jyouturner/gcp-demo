@@ -39,11 +39,16 @@ print_status "Project number for $SERVICE_PROJECT_NAME: $PROJECT_NUMBER"
 # 2. Verify Shared VPC Host Project Configuration
 print_info "Verifying Shared VPC Host Project Configuration..."
 gcloud config set project $HOST_PROJECT_NAME >/dev/null 2>&1
-HOST_PROJECTS=$(gcloud compute shared-vpc organizations list-host-projects $ORG_ID 2>/dev/null)
-if echo "$HOST_PROJECTS" | grep -q "$HOST_PROJECT_NAME"; then
-    print_status "$HOST_PROJECT_NAME is a Shared VPC host project"
+
+if [[ -n "$ORG_ID" ]]; then
+    HOST_PROJECTS=$(gcloud compute shared-vpc organizations list-host-projects $ORG_ID 2>/dev/null)
+    if echo "$HOST_PROJECTS" | grep -q "$HOST_PROJECT_NAME"; then
+        print_status "$HOST_PROJECT_NAME is a Shared VPC host project"
+    else
+        print_status "$HOST_PROJECT_NAME is NOT a Shared VPC host project"
+    fi
 else
-    print_status "$HOST_PROJECT_NAME is NOT a Shared VPC host project"
+    print_info "ORG_ID not provided. Skipping host project verification."
 fi
 
 # Check if Dataproc project is associated
@@ -116,12 +121,22 @@ print_info "Verifying VPC Network Configuration..."
 check_role $HOST_PROJECT_NAME "roles/compute.networkUser" $DATAPROC_SA "subnet" $SHARED_SUBNET_NAME
 check_role $HOST_PROJECT_NAME "roles/compute.networkUser" $GOOGLE_APIS_SA "subnet" $SHARED_SUBNET_NAME
 
-# Check Private Google Access
+# Check Private Google Access and Cloud NAT
 PRIVATE_ACCESS=$(gcloud compute networks subnets describe $SHARED_SUBNET_NAME --region=$REGION --project=$HOST_PROJECT_NAME --format="get(privateIpGoogleAccess)")
-if [ "$PRIVATE_ACCESS" = "true" ] || [ "$PRIVATE_ACCESS" = "True" ]; then
-    print_status "INFO: Private Google Access is enabled on subnet $SHARED_SUBNET_NAME"
+
+if [[ -n "$ROUTER_NAME" ]]; then
+    CLOUD_NAT=$(gcloud compute routers nats list --router=$ROUTER_NAME --region=$REGION --project=$HOST_PROJECT_NAME --format="get(name)")
+    if [ "$PRIVATE_ACCESS" = "true" ] || [ "$PRIVATE_ACCESS" = "True" ] || [ ! -z "$CLOUD_NAT" ]; then
+        print_status "PASSED: Private Google Access is enabled or Cloud NAT is configured for subnet $SHARED_SUBNET_NAME"
+    else
+        print_status "NOTE: Neither Private Google Access nor Cloud NAT is explicitly enabled on subnet $SHARED_SUBNET_NAME. Verify if this is intended."
+    fi
 else
-    print_info "NOTE: Private Google Access is NOT enabled on subnet $SHARED_SUBNET_NAME. This may or may not be an issue depending on your specific configuration."
+    if [ "$PRIVATE_ACCESS" = "true" ] || [ "$PRIVATE_ACCESS" = "True" ]; then
+        print_status "PASSED: Private Google Access is enabled for subnet $SHARED_SUBNET_NAME"
+    else
+        print_status "NOTE: Private Google Access is NOT enabled on subnet $SHARED_SUBNET_NAME. Cloud NAT status unknown (ROUTER_NAME not provided)."
+    fi
 fi
 
 # Additional debugging information
