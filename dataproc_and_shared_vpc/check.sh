@@ -134,11 +134,29 @@ gcloud compute networks subnets describe $SHARED_SUBNET_NAME --region=$REGION --
 
 # 5. Check Firewall Rules
 print_info "Checking Firewall Rules..."
-FIREWALL_RULES=$(gcloud compute firewall-rules list --project=$HOST_PROJECT_NAME 2>/dev/null)
-if echo "$FIREWALL_RULES" | grep -q "allow.*tcp:6379"; then
+FIREWALL_RULES=$(gcloud compute firewall-rules list --project=$HOST_PROJECT_NAME --format=json)
+
+# Check Redis rule
+if echo "$FIREWALL_RULES" | jq -e '.[] | select(.allowed[].ports[] == "6379")' > /dev/null; then
     print_status "PASSED: Firewall rule allowing traffic to Redis port 6379 exists"
 else
     print_status "FAILED: No firewall rule found allowing traffic to Redis port 6379"
+fi
+
+# Check Dataproc internal communication rule
+if echo "$FIREWALL_RULES" | jq -e '.[] | select(.allowed[].ports == null and .allowed[].IPProtocol == "tcp")' > /dev/null &&
+   echo "$FIREWALL_RULES" | jq -e '.[] | select(.allowed[].ports == null and .allowed[].IPProtocol == "udp")' > /dev/null &&
+   echo "$FIREWALL_RULES" | jq -e '.[] | select(.allowed[].IPProtocol == "icmp")' > /dev/null; then
+    print_status "PASSED: Firewall rules for Dataproc internal communication exist"
+else
+    print_status "FAILED: Missing firewall rules for Dataproc internal communication"
+fi
+
+# Check for source tags or ranges
+if echo "$FIREWALL_RULES" | jq -e '.[] | select(.sourceTags != null or .sourceRanges != null)' > /dev/null; then
+    print_status "PASSED: Firewall rules use source tags or ranges for specificity"
+else
+    print_status "WARNING: Firewall rules might not be specific enough. Check source tags or ranges."
 fi
 
 # 6. Verify MemoryStore Instance Configuration
